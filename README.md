@@ -18,8 +18,11 @@ PDFs → Text Chunking → Embeddings → Vector Store (ChromaDB)
     * **Single Doc Mode**: Select a specific file to narrow down the context.
     * **Comparison Mode**: Select multiple files (e.g., "Report 2023" vs "Report 2024") to perform cross-document analysis.
     * **Global Search**: Search across the entire knowledge base by leaving the selection empty.
+* **Enterprise Security**: 
+    * **Password Protection**: Built-in authentication gate preventing unauthorized access.
+    * **Secure Secrets Management**: Uses `secrets.toml` for API keys and credentials (replacing insecure `.env` files).
 * **Intelligent Citations**: Every response includes precise references to the source file and page number.
-* **Secure Architecture**: Built with local vector storage (ChromaDB) to ensure data persistence.
+* **Cloud Ready**: Optimized for deployment on Streamlit Cloud (includes SQLite fixes).
 
 ## Tech Stack
 
@@ -58,9 +61,21 @@ Clone the repository and install dependencies:
 
 3. Environment Configuration
 
-Create a .env file in the root directory and add your API key:
+Create a folder named .streamlit in the root directory.
 
-	OPENAI_API_KEY=sk-proj-your-actual-api-key-here
+Inside it, create a file named secrets.toml.
+
+Add your credentials:
+
+	# .streamlit/secrets.toml
+	
+	# 1. API Keys
+	OPENAI_API_KEY = "sk-proj-your-actual-api-key-here"
+	
+	# 2. App Login Credentials
+	[passwords]
+	admin = "admin123"
+	user1 = "securepass456"
 
 Usage
 Step 1: Ingest Data
@@ -70,14 +85,20 @@ Bash
 
 	python src/ingestion.py
 
-This will scan the data/ folder, chunk the PDFs, and populate vector_db/.
+This will scan the data/ folder, chunk the PDFs, and populate vector_db/. Ensure you commit this folder if deploying to Streamlit Cloud.
 
 Step 2: Launch Application
 
 Start the Streamlit interface to query your documents.
 
 	streamlit run app.py
+	
+Step 3: Interact
+Login: Enter the username and password defined in your secrets.toml.
 
+Select Context: Use the sidebar to select specific documents or leave empty to search all.
+
+Query: Ask questions like "compare the risks between AI and Cybersecurity" or "summarize mckinsey report".
 
 ## System Architecture
 
@@ -93,9 +114,13 @@ Ingestion Pipeline (src/ingestion.py)
 
 Retrieval Pipeline (app.py)
 
+	Auth: Validates user credentials against secrets.toml.
+	
+	Filter: Applies metadata filters based on user selection (Single vs. Multi-doc).
+
     Query: User submits a question via Streamlit.
 
-    Search: System performs MMR Search (k=12, fetch_k=50) on vector_db to find diverse context.
+    Search: Performs MMR Search on vector_db to find diverse context.
 
     Generate: GPT-4o-mini synthesizes an answer using the retrieved context.
 

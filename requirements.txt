@@ -8,3 +8,4 @@ pypdf
 streamlit
 python-dotenv
 tiktoken
+pysqlite3-binary ; sys_platform == 'linux'
