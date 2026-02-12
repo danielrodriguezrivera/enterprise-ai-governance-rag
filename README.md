@@ -11,6 +11,16 @@ The system implements a standard Retrieval-Augmented Generation (RAG) pipeline:
 PDFs → Text Chunking → Embeddings → Vector Store (ChromaDB)
       → Retriever → LLM → Structured Answer + Source Citation
 
+## 🚀 Key Features
+
+* **Multi-Document Ingestion**: Automatically processes and vectorizes multiple PDF files from a secure directory.
+* **Dynamic Document Filtering**: 
+    * **Single Doc Mode**: Select a specific file to narrow down the context.
+    * **Comparison Mode**: Select multiple files (e.g., "Report 2023" vs "Report 2024") to perform cross-document analysis.
+    * **Global Search**: Search across the entire knowledge base by leaving the selection empty.
+* **Intelligent Citations**: Every response includes precise references to the source file and page number.
+* **Secure Architecture**: Built with local vector storage (ChromaDB) to ensure data persistence.
+
 ## Tech Stack
 
 * **Language:** Python 3.10+

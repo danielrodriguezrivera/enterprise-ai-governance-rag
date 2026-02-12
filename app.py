@@ -24,9 +24,11 @@ st.set_page_config(
 # -----------------------------
 # 2. SIDEBAR - PROFILE & DATA
 # -----------------------------
+DB_PATH = "./vector_db"
+DATA_FOLDER = "./data"
+
 with st.sidebar:
     st.header("Author")
-    
     st.markdown("Daniel Edgardo Rodríguez Rivera")
     st.markdown("El Salvador")
     
@@ -38,36 +40,41 @@ with st.sidebar:
         st.link_button("GitHub Repo", "https://github.com/danielrodriguezrivera/")
     st.markdown("---")
 
-    st.subheader("Data Sources")
-    data_folder = "./data"
+    st.subheader("Knowledge Scope")
     
-    if os.path.exists(data_folder):
-        files = [f for f in os.listdir(data_folder) if f.endswith('.pdf')]
-        if files:
-            st.info(f"{len(files)} Document(s) Loaded")
-            for f in files:
-                st.text(f"- {f}")
-        else:
-            st.warning("No PDFs found in /data directory")
+    # --- NEW FEATURE: DOCUMENT SELECTOR ---
+    available_files = []
+    if os.path.exists(DATA_FOLDER):
+        available_files = [f for f in os.listdir(DATA_FOLDER) if f.endswith('.pdf')]
     
+    # Multiselect allows: 
+    # 1. Empty = Search All
+    # 2. One file = Specific Query
+    # 3. Two+ files = Comparison Mode
+    selected_files = st.multiselect(
+        "Select Documents to Analyze:",
+        options=available_files,
+        placeholder="Select files or leave empty for all"
+    )
+
+    if selected_files:
+        st.info(f"🔍 Searching in {len(selected_files)} specific document(s).")
+    else:
+        st.info("🌐 Searching across ALL documents.")
+
     st.markdown("---")
     
-    # ARCHITECTURE DIAGRAM
     st.subheader("System Architecture")
     if os.path.exists("architecture_diagram.png"):
         st.image("architecture_diagram.png", caption="RAG Pipeline Architecture", width="stretch")
-    else:
-        st.info("Architecture diagram not found.")
 
-    # TECH STACK LINKS
     st.markdown("### Technologies Used")
     st.markdown("""
-- [LangChain Documentation](https://python.langchain.com/docs/get_started/introduction)
-- [OpenAI API Reference](https://platform.openai.com/docs/introduction)
-- [ChromaDB Docs](https://docs.trychroma.com/)
-- [Streamlit Docs](https://docs.streamlit.io/)
-- [Python 3.10+](https://www.python.org/)
-""")
+    - [LangChain](https://python.langchain.com/)
+    - [OpenAI](https://platform.openai.com/)
+    - [ChromaDB](https://docs.trychroma.com/)
+    - [Streamlit](https://docs.streamlit.io/)
+    """)
 
 # -----------------------------
 # 3. MAIN HEADER
@@ -75,47 +82,61 @@ with st.sidebar:
 st.title("Enterprise Document Assistant")
 st.markdown("### Multi-Document RAG System")
 st.markdown("""
-This system ingests PDF documents from the secure data repository and allows for cross-document querying using retrieval-augmented generation.
+This system allows for **Individual Document Analysis** and **Cross-Document Comparisons**.
+Select specific files in the sidebar to narrow your search, or leave it empty to query the entire knowledge base.
 """)
 st.divider()
 
 # -----------------------------
 # 4. BACKEND LOGIC
 # -----------------------------
-DB_PATH = "./vector_db"
 
 if not os.path.exists(DB_PATH):
     st.error("System Error: Knowledge Base not found. Please run ingestion script.")
     st.stop()
 
+# Cache the Vector DB connection ONLY (not the retriever/chain, as those are now dynamic)
 @st.cache_resource
-def load_chain():
+def get_vector_store():
     embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
-
-    vector_db = Chroma(
+    return Chroma(
         persist_directory=DB_PATH,
         embedding_function=embeddings
     )
 
+def get_rag_chain(vector_db, selected_files):
+    # --- DYNAMIC FILTERING LOGIC ---
+    search_kwargs = {
+        "k": 10, # Good balance for comparisons
+        "fetch_k": 50
+    }
+
+    # Apply ChromaDB metadata filter if files are selected
+    if selected_files:
+        if len(selected_files) == 1:
+            # Filter for exactly one file
+            search_kwargs["filter"] = {"source_file": selected_files[0]}
+        else:
+            # Filter for ANY of the selected files ($in operator)
+            search_kwargs["filter"] = {"source_file": {"$in": selected_files}}
+
+    # Create retriever with dynamic filters
     retriever = vector_db.as_retriever(
         search_type="mmr",
-        search_kwargs={
-            "k": 12,
-            "fetch_k": 50
-        }
+        search_kwargs=search_kwargs
     )
-
 
     llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
 
+    # Prompt tweaked to encourage comparisons if multiple docs are present
     prompt = ChatPromptTemplate.from_template("""
 You are a Corporate Knowledge Assistant.
 
 Instructions:
 1. Answer the question using ONLY the provided Context.
-2. The Context may contain information from multiple different files.
-3. If the answer is not present, strictly state:
-   "Information not found in the provided documents."
+2. The Context may contain information from specific selected files.
+3. If comparing documents, explicitly mention the differences or similarities found.
+4. If the answer is not present, strictly state: "Information not found in the provided documents."
 
 Context:
 {context}
@@ -137,7 +158,9 @@ Question:
     return rag_chain, retriever
 
 try:
-    rag_chain, retriever = load_chain()
+    vector_db = get_vector_store()
+    # Re-generate chain based on current sidebar selection
+    rag_chain, retriever = get_rag_chain(vector_db, selected_files)
 except Exception as e:
     st.error(f"System Error: {e}")
     st.stop()
@@ -147,7 +170,7 @@ except Exception as e:
 # -----------------------------
 if "messages" not in st.session_state:
     st.session_state.messages = [
-        {"role": "assistant", "content": "System ready. Please enter your query regarding the loaded documents."}
+        {"role": "assistant", "content": "System ready. Select documents in the sidebar or ask a question about the whole database."}
     ]
 
 for msg in st.session_state.messages:
@@ -164,6 +187,7 @@ if prompt := st.chat_input("Enter your query..."):
             try:
                 answer = rag_chain.invoke(prompt)
 
+                # Fetch source documents for citation
                 docs = retriever.invoke(prompt)
 
                 sources_list = []
