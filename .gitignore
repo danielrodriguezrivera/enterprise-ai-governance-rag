@@ -207,6 +207,6 @@ marimo/_lsp/
 __marimo__/
 
 #project specific
-vector_db/
+#vector_db/ #needed for streamlit cloud deployment
 .DS_Store
 .streamlit/secrets.toml
